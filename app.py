@@ -17,6 +17,7 @@ from werkzeug.utils import secure_filename
 import torch
 from PIL import Image
 import yolov5
+import yolov5.models # Add this line to import models
 from htp_analyzer import HTPAnalyzer
 
 app = Flask(__name__)
@@ -41,6 +42,8 @@ class YOLOv5HTPAnalyzer:
     
     def load_models(self):
         """모든 YOLOv5 HTP 모델 로드"""
+        # PyTorch 2.6+에서 모델 로딩 문제 해결
+        torch.serialization.add_safe_globals([yolov5.models.yolo.Model])
         model_configs = {
             "House": {
                 "weights": "01modelcode/yolov5-htp-docker/pretrained-weights/House/exp/weights/best.pt",
