@@ -42,8 +42,12 @@ class YOLOv5HTPAnalyzer:
     
     def load_models(self):
         """모든 YOLOv5 HTP 모델 로드"""
-        # PyTorch 2.6+에서 모델 로딩 문제 해결
-        torch.serialization.add_safe_globals([yolov5.models.yolo.Model])
+        # PyTorch 2.0+에서 모델 로딩 문제 해결 (버전 호환성 체크)
+        try:
+            if hasattr(torch.serialization, 'add_safe_globals'):
+                torch.serialization.add_safe_globals([yolov5.models.yolo.Model])
+        except Exception as e:
+            print(f"PyTorch 버전 호환성 경고: {e}")
         model_configs = {
             "House": {
                 "weights": "01modelcode/yolov5-htp-docker/pretrained-weights/House/exp/weights/best.pt",
