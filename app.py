@@ -829,8 +829,9 @@ def chatbot():
         # 현재 질문 추가
         messages.append({"role": "user", "content": enhanced_query})
         
-        # OpenAI API 호출
-        response = openai.ChatCompletion.create(
+        # OpenAI API 호출 (최신 버전)
+        client = openai.OpenAI(api_key=openai.api_key)
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             max_tokens=1000,
