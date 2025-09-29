@@ -70,7 +70,7 @@ class YOLOv5HTPAnalyzer:
         for model_name, config in model_configs.items():
             try:
                 if os.path.exists(config["weights"]):
-                    model = yolov5.load(config["weights"])
+                    model = yolov5.load(config["weights"], weights_only=False)
                     model.conf = 0.25  # 기본 신뢰도 임계값
                     model.iou = 0.45   # 기본 IoU 임계값
                     self.models[model_name] = {
