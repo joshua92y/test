@@ -9,12 +9,23 @@ YOLOv5 HTP(House-Tree-Person) 이미지 분석을 위한 Flask 백엔드 서버�
 pip install -r requirements.txt
 ```
 
-### 2. 모델 파일 다운로드 (선택사항)
+### 2. 환경변수 설정
+`.env` 파일을 생성하고 필요한 API 키를 설정하세요:
+```bash
+# .env 파일 생성
+OPENAI_API_KEY=your_openai_api_key_here
+NAVER_CLIENT_ID=your_naver_client_id_here
+NAVER_CLIENT_SECRET=your_naver_client_secret_here
+NAVER_SEARCH_CLIENT_ID=your_naver_search_client_id_here
+NAVER_SEARCH_CLIENT_SECRET=your_naver_search_client_secret_here
+```
+
+### 3. 모델 파일 다운로드 (선택사항)
 ```bash
 python download_models.py
 ```
 
-### 3. 웹 서버 실행
+### 4. 웹 서버 실행
 ```bash
 python app.py
 ```
