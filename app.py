@@ -42,12 +42,21 @@ class YOLOv5HTPAnalyzer:
     
     def load_models(self):
         """모든 YOLOv5 HTP 모델 로드"""
-        # PyTorch 2.0+에서 모델 로딩 문제 해결 (버전 호환성 체크)
+        # PyTorch 2.8.0+에서 모델 로딩 문제 해결
         try:
-            if hasattr(torch.serialization, 'add_safe_globals'):
-                torch.serialization.add_safe_globals([yolov5.models.yolo.Model])
+            # YOLOv5 모델 클래스를 안전한 글로벌로 등록
+            torch.serialization.add_safe_globals([yolov5.models.yolo.Model])
+            print("✅ PyTorch 안전 글로벌 설정 완료")
         except Exception as e:
-            print(f"PyTorch 버전 호환성 경고: {e}")
+            print(f"PyTorch 안전 글로벌 설정 경고: {e}")
+       
+        # torch.load를 래핑하여 weights_only=False 설정
+        original_torch_load = torch.load
+        def patched_torch_load(*args, **kwargs):
+            kwargs['weights_only'] = False
+            return original_torch_load(*args, **kwargs)
+        torch.load = patched_torch_load
+        
         model_configs = {
             "House": {
                 "weights": "01modelcode/yolov5-htp-docker/pretrained-weights/House/exp/weights/best.pt",
@@ -70,7 +79,7 @@ class YOLOv5HTPAnalyzer:
         for model_name, config in model_configs.items():
             try:
                 if os.path.exists(config["weights"]):
-                    model = yolov5.load(config["weights"], weights_only=False)
+                    model = yolov5.load(config["weights"])
                     model.conf = 0.25  # 기본 신뢰도 임계값
                     model.iou = 0.45   # 기본 IoU 임계값
                     self.models[model_name] = {
