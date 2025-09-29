@@ -19,6 +19,21 @@ from PIL import Image
 import yolov5
 import yolov5.models # Add this line to import models
 from htp_analyzer import HTPAnalyzer
+from dotenv import load_dotenv
+import openai
+import httpx
+
+# 환경변수 로드
+load_dotenv()
+
+# OpenAI API 설정
+openai.api_key = os.getenv('OPENAI_API_KEY')
+
+# 네이버 API 키 설정
+NAVER_CLIENT_ID = os.getenv('NAVER_CLIENT_ID')
+NAVER_CLIENT_SECRET = os.getenv('NAVER_CLIENT_SECRET')
+NAVER_SEARCH_CLIENT_ID = os.getenv('NAVER_SEARCH_CLIENT_ID')
+NAVER_SEARCH_CLIENT_SECRET = os.getenv('NAVER_SEARCH_CLIENT_SECRET')
 
 app = Flask(__name__)
 CORS(app)  # CORS 활성화
@@ -270,6 +285,257 @@ def predict_with_model(model_name):
         return jsonify({
             "error": f"서버 오류: {str(e)}"
         }), 500
+
+@app.route('/api/chatbot', methods=['POST'])
+def chatbot():
+    """OpenAI 챗봇 API"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'message' not in data:
+            return jsonify({
+                "error": "메시지가 필요합니다."
+            }), 400
+        
+        user_message = data['message']
+        
+        if not openai.api_key:
+            return jsonify({
+                "error": "OpenAI API 키가 설정되지 않았습니다."
+            }), 500
+        
+        # OpenAI API 호출
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "당신은 심리상담 전문가입니다. 사용자의 심리 상태를 분석하고 도움을 주는 역할을 합니다."},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=1000,
+            temperature=0.7
+        )
+        
+        bot_response = response.choices[0].message.content
+        
+        return jsonify({
+            "success": True,
+            "response": bot_response,
+            "message": "챗봇 응답이 완료되었습니다."
+        })
+        
+    except Exception as e:
+        print(f"챗봇 API 오류: {e}")
+        return jsonify({
+            "error": f"서버 오류: {str(e)}"
+        }), 500
+
+@app.route('/api/search', methods=['POST'])
+def search_places():
+    """네이버 검색 API 프록시"""
+    try:
+        data = request.get_json()
+        query = data.get("query", "")
+        display = data.get("display", 10)
+        
+        print(f"🔍 검색 요청 받음: {query}")
+        
+        if not query:
+            return jsonify({"error": "검색어가 필요합니다"}), 400
+        
+        if not NAVER_SEARCH_CLIENT_ID or not NAVER_SEARCH_CLIENT_SECRET:
+            return jsonify({"error": "네이버 검색 API 키가 설정되지 않았습니다"}), 500
+        
+        with httpx.Client() as client:
+            response = client.get(
+                "https://openapi.naver.com/v1/search/local.json",
+                params={
+                    "query": query,
+                    "display": display,
+                    "start": 1,
+                    "sort": "random"
+                },
+                headers={
+                    "X-Naver-Client-Id": NAVER_SEARCH_CLIENT_ID,
+                    "X-Naver-Client-Secret": NAVER_SEARCH_CLIENT_SECRET,
+                },
+                timeout=10.0
+            )
+            
+            if response.status_code != 200:
+                return jsonify({
+                    "error": f"네이버 검색 API 오류: {response.text}"
+                }), response.status_code
+            
+            data = response.json()
+            
+            # 검색 결과 파싱
+            if data.get("items"):
+                results = []
+                for item in data["items"]:
+                    results.append({
+                        "title": item.get("title", "").replace("<b>", "").replace("</b>", ""),
+                        "address": item.get("address", ""),
+                        "roadAddress": item.get("roadAddress", ""),
+                        "category": item.get("category", ""),
+                        "description": item.get("description", "").replace("<b>", "").replace("</b>", ""),
+                        "link": item.get("link", ""),
+                        "telephone": item.get("telephone", "")
+                    })
+                
+                return jsonify({
+                    "success": True,
+                    "data": results,
+                    "total": data.get("total", 0),
+                    "source": "naver_api"
+                })
+            else:
+                return jsonify({
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "source": "naver_api"
+                })
+                
+    except httpx.TimeoutException:
+        return jsonify({"error": "API 요청 시간 초과"}), 408
+    except httpx.RequestError as e:
+        return jsonify({"error": f"API 요청 오류: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"서버 오류: {str(e)}"}), 500
+
+@app.route('/api/geocode', methods=['POST'])
+def geocode():
+    """네이버 지오코딩 API 프록시"""
+    try:
+        data = request.get_json()
+        address = data.get("address", "")
+        
+        print(f"🗺️ 지오코딩 요청 받음: {address}")
+        
+        if not address:
+            return jsonify({"error": "주소가 필요합니다"}), 400
+        
+        if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
+            return jsonify({"error": "네이버 지오코딩 API 키가 설정되지 않았습니다"}), 500
+        
+        with httpx.Client() as client:
+            response = client.get(
+                "https://maps.apigw.ntruss.com/map-geocode/v2/geocode",
+                params={
+                    "query": address,
+                    "output": "json"
+                },
+                headers={
+                    "x-ncp-apigw-api-key-id": NAVER_CLIENT_ID,
+                    "x-ncp-apigw-api-key": NAVER_CLIENT_SECRET,
+                    "Accept": "application/json"
+                },
+                timeout=10.0
+            )
+            
+            if response.status_code != 200:
+                return jsonify({
+                    "error": f"네이버 지오코딩 API 오류: {response.text}"
+                }), response.status_code
+            
+            data = response.json()
+            
+            if data.get("addresses") and len(data["addresses"]) > 0:
+                address_info = data["addresses"][0]
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "lat": float(address_info.get("y", 0)),
+                        "lng": float(address_info.get("x", 0)),
+                        "address": address_info.get("roadAddress", ""),
+                        "jibunAddress": address_info.get("jibunAddress", "")
+                    },
+                    "source": "naver_api"
+                })
+            else:
+                return jsonify({"error": "주소를 찾을 수 없습니다"}), 404
+                
+    except httpx.TimeoutException:
+        return jsonify({"error": "API 요청 시간 초과"}), 408
+    except httpx.RequestError as e:
+        return jsonify({"error": f"API 요청 오류: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"서버 오류: {str(e)}"}), 500
+
+@app.route('/api/reverse-geocode', methods=['POST'])
+def reverse_geocode():
+    """네이버 역지오코딩 API 프록시"""
+    try:
+        data = request.get_json()
+        lat = data.get("lat")
+        lng = data.get("lng")
+        
+        print(f"🗺️ 역지오코딩 요청 받음: {lat}, {lng}")
+        
+        if not lat or not lng:
+            return jsonify({"error": "위도와 경도가 필요합니다"}), 400
+        
+        if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
+            return jsonify({"error": "네이버 지오코딩 API 키가 설정되지 않았습니다"}), 500
+        
+        with httpx.Client() as client:
+            response = client.get(
+                "https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc",
+                params={
+                    "coords": f"{lng},{lat}",
+                    "output": "json"
+                },
+                headers={
+                    "x-ncp-apigw-api-key-id": NAVER_CLIENT_ID,
+                    "x-ncp-apigw-api-key": NAVER_CLIENT_SECRET,
+                    "Accept": "application/json"
+                },
+                timeout=10.0
+            )
+            
+            if response.status_code != 200:
+                return jsonify({
+                    "error": f"네이버 역지오코딩 API 오류: {response.text}"
+                }), response.status_code
+            
+            data = response.json()
+            
+            if data.get("results") and len(data["results"]) > 0:
+                result = data["results"][0]
+                region = result.get("region", {})
+                land = result.get("land", {})
+                
+                address_parts = []
+                if region.get("area1", {}).get("name"):
+                    address_parts.append(region["area1"]["name"])
+                if region.get("area2", {}).get("name"):
+                    address_parts.append(region["area2"]["name"])
+                if region.get("area3", {}).get("name"):
+                    address_parts.append(region["area3"]["name"])
+                
+                full_address = " ".join(address_parts)
+                
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "address": full_address,
+                        "area1": region.get("area1", {}).get("name", ""),
+                        "area2": region.get("area2", {}).get("name", ""),
+                        "area3": region.get("area3", {}).get("name", ""),
+                        "roadAddress": land.get("name", ""),
+                        "jibunAddress": land.get("number1", "")
+                    },
+                    "source": "naver_api"
+                })
+            else:
+                return jsonify({"error": "주소를 찾을 수 없습니다"}), 404
+                
+    except httpx.TimeoutException:
+        return jsonify({"error": "API 요청 시간 초과"}), 408
+    except httpx.RequestError as e:
+        return jsonify({"error": f"API 요청 오류: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"서버 오류: {str(e)}"}), 500
 
 if __name__ == '__main__':
     print("=" * 60)
