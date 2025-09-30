@@ -629,6 +629,48 @@ def generate_interpretation(object_type, feature_name, feature_value, criteria_t
     
     return interpretation if interpretation["interpretation"] else None
 
+def is_counseling_related(title, category, description):
+    """상담센터 관련 키워드인지 판별"""
+    
+    # 상담센터 관련 키워드 (포함되어야 함)
+    counseling_keywords = [
+        '상담', '심리', '정신', '치료', '클리닉', '센터', '의원', '병원',
+        '마음', '정신건강', '심리상담', '심리치료', '정신과', '정신건강복지',
+        '상담센터', '심리상담센터', '심리치료센터', '정신건강복지센터',
+        '심리클리닉', '마음상담센터', '정신과의원', '정신건강의학과',
+        '우울', '불안', '스트레스', '트라우마', '가족상담', '부부상담',
+        '청소년상담', '아동상담', '노인상담', '집단상담', '개인상담'
+    ]
+    
+    # 제외할 키워드 (포함되면 안됨)
+    exclude_keywords = [
+        '카페', '커피', '음식점', '식당', '레스토랑', '패스트푸드',
+        '가죽', '공방', '수제', '핸드메이드', '공예', '만들기',
+        '미용', '헤어', '네일', '피부', '마사지', '스파',
+        '헬스', '피트니스', '요가', '필라테스', '운동',
+        '학원', '교육', '학습', '과외', '입시', '어학',
+        '쇼핑', '마트', '편의점', '백화점', '상점',
+        '호텔', '펜션', '모텔', '숙박', '여행',
+        '은행', '보험', '금융', '증권', '대출',
+        '자동차', '정비', '수리', '세차', '주유',
+        '부동산', '중개', '임대', '매매', '분양'
+    ]
+    
+    # 모든 텍스트를 소문자로 변환하여 검색
+    text_to_check = f"{title} {category} {description}".lower()
+    
+    # 제외 키워드가 포함되어 있으면 False
+    for exclude_keyword in exclude_keywords:
+        if exclude_keyword in text_to_check:
+            return False
+    
+    # 상담센터 관련 키워드가 하나라도 포함되어 있으면 True
+    for counseling_keyword in counseling_keywords:
+        if counseling_keyword in text_to_check:
+            return True
+    
+    return False
+
 def allowed_file(filename):
     """파일 확장자 검증"""
     return '.' in filename and \
@@ -891,18 +933,29 @@ def search_places():
             
             data = response.json()
             
-            # 검색 결과 파싱
+            # 검색 결과 파싱 및 필터링
             if data.get("items"):
                 results = []
                 for item in data["items"]:
+                    title = item.get("title", "").replace("<b>", "").replace("</b>", "")
+                    category = item.get("category", "")
+                    description = item.get("description", "").replace("<b>", "").replace("</b>", "")
+                    
+                    # 상담센터 관련 키워드 필터링 (일시적으로 비활성화)
+                    print(f"🔍 검색 결과: {title} | 카테고리: {category} | 설명: {description}")
+                    is_related = is_counseling_related(title, category, description)
+                    print(f"🔍 필터링 결과: {is_related}")
+                    
+                    # 일시적으로 모든 결과를 포함 (디버깅용)
                     results.append({
-                        "title": item.get("title", "").replace("<b>", "").replace("</b>", ""),
+                        "title": title,
                         "address": item.get("address", ""),
                         "roadAddress": item.get("roadAddress", ""),
-                        "category": item.get("category", ""),
-                        "description": item.get("description", "").replace("<b>", "").replace("</b>", ""),
+                        "category": category,
+                        "description": description,
                         "link": item.get("link", ""),
-                        "telephone": item.get("telephone", "")
+                        "telephone": item.get("telephone", ""),
+                        "is_counseling_related": is_related  # 디버깅용 필드 추가
                     })
                 
                 return jsonify({
